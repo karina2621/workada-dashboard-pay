@@ -31,7 +31,6 @@ async function zendeskFetch<T>(path: string): Promise<T> {
       Authorization: authHeader(),
       "Content-Type": "application/json",
     },
-    // Dashboard data can be a little stale; avoid hammering Zendesk on every load.
     next: { revalidate: 60 },
   });
 
@@ -77,6 +76,12 @@ interface TicketFieldsResponse {
   ticket_fields: TicketField[];
 }
 
+export interface IssueTypeFieldMeta {
+  fieldId: number;
+  // raw option value -> human-readable label, e.g. "payment" -> "Payment"
+  labelsByValue: Map<string, string>;
+}
+
 interface UsersResponse {
   users: { id: number; name: string; email: string }[];
 }
@@ -112,35 +117,40 @@ async function searchTickets(query: string): Promise<ZendeskTicket[]> {
   return all;
 }
 
-// Resolves the ticket field id + option value for a given field title / option label,
-// e.g. title "Issue Type", option label "Payment" -> { fieldId, value }
-async function resolveCustomFieldOption(
-  fieldTitleMatch: string,
-  optionLabelMatch: string
-): Promise<{ fieldId: number; value: string } | null> {
+// Finds the "Issue Type" ticket field and returns its id plus a map of every
+// option's raw value -> human-readable label (used both for filtering and
+// for the "tickets per issue type" breakdown).
+async function getIssueTypeFieldMeta(fieldTitleMatch: string): Promise<IssueTypeFieldMeta | null> {
   const data = await zendeskFetch<TicketFieldsResponse>("/ticket_fields.json?per_page=100");
   const field = data.ticket_fields.find((f) =>
     f.title.toLowerCase().includes(fieldTitleMatch.toLowerCase())
   );
   if (!field || !field.custom_field_options) return null;
 
-  const option = field.custom_field_options.find((o) =>
-    o.name.toLowerCase().includes(optionLabelMatch.toLowerCase())
-  );
-  if (!option) return null;
+  const labelsByValue = new Map<string, string>();
+  for (const opt of field.custom_field_options) {
+    labelsByValue.set(opt.value, opt.name);
+  }
 
-  return { fieldId: field.id, value: option.value };
+  return { fieldId: field.id, labelsByValue };
 }
 
-export async function fetchFilteredTickets(assigneeEmail: string): Promise<ZendeskTicket[]> {
+export async function fetchFilteredTickets(
+  assigneeEmail: string
+): Promise<{ tickets: ZendeskTicket[]; issueTypeField: IssueTypeFieldMeta | null }> {
   const queries: string[] = [
     "type:ticket tags:payment",
     `type:ticket assignee:${assigneeEmail}`,
   ];
 
-  const issueTypeField = await resolveCustomFieldOption("issue type", "payment");
+  const issueTypeField = await getIssueTypeFieldMeta("issue type");
   if (issueTypeField) {
-    queries.push(`type:ticket custom_field_${issueTypeField.fieldId}:${issueTypeField.value}`);
+    const paymentEntry = Array.from(issueTypeField.labelsByValue.entries()).find(([, label]) =>
+      label.toLowerCase().includes("payment")
+    );
+    if (paymentEntry) {
+      queries.push(`type:ticket custom_field_${issueTypeField.fieldId}:${paymentEntry[0]}`);
+    }
   }
 
   const resultSets = await Promise.all(queries.map((q) => searchTickets(q)));
@@ -152,9 +162,11 @@ export async function fetchFilteredTickets(assigneeEmail: string): Promise<Zende
     }
   }
 
-  return Array.from(merged.values()).sort(
+  const tickets = Array.from(merged.values()).sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  return { tickets, issueTypeField };
 }
 
 export async function fetchUserNames(ids: number[]): Promise<Map<number, string>> {
@@ -162,7 +174,6 @@ export async function fetchUserNames(ids: number[]): Promise<Map<number, string>
   const map = new Map<number, string>();
   if (unique.length === 0) return map;
 
-  // show_many supports up to 100 ids per call
   for (let i = 0; i < unique.length; i += 100) {
     const chunk = unique.slice(i, i + 100);
     const data = await zendeskFetch<UsersResponse>(
@@ -187,8 +198,6 @@ export async function fetchSatisfactionRatings(
     all.push(...data.satisfaction_ratings.filter((r) => ticketIds.has(r.ticket_id)));
     path = data.next_page ? data.next_page.replace(baseUrl(), "") : null;
     pages += 1;
-    // Once we've paged past the point where nothing new matches our ticket set for
-    // a couple of pages in a row, it's not worth continuing to page through history.
   }
 
   return all;
