@@ -25,7 +25,7 @@ function isWithinDays(dateStr: string, days: number): boolean {
 
 export async function GET() {
   try {
-    const tickets = await fetchFilteredTickets(ASSIGNEE_EMAIL);
+    const { tickets, issueTypeField } = await fetchFilteredTickets(ASSIGNEE_EMAIL);
 
     const requesterIds = tickets.map((t) => t.requester_id);
     const assigneeIds = tickets.map((t) => t.assignee_id).filter((v): v is number => v !== null);
@@ -96,6 +96,33 @@ export async function GET() {
       return name?.toLowerCase().includes("karina");
     });
 
+    // Breakdown: how many matched tickets fall under each "Issue Type" value,
+    // e.g. Payment: 40, Login Issues: 5, Uncategorized: 3 — total/open/closed/this week each.
+    interface BreakdownRow {
+      issueType: string;
+      total: number;
+      open: number;
+      closed: number;
+      thisWeek: number;
+    }
+    const breakdownMap = new Map<string, BreakdownRow>();
+    for (const t of tickets) {
+      let label = "Uncategorized";
+      if (issueTypeField) {
+        const cf = t.custom_fields.find((f) => f.id === issueTypeField.fieldId);
+        if (cf?.value) {
+          label = issueTypeField.labelsByValue.get(cf.value) ?? cf.value;
+        }
+      }
+      const row = breakdownMap.get(label) ?? { issueType: label, total: 0, open: 0, closed: 0, thisWeek: 0 };
+      row.total += 1;
+      if (OPEN_STATUSES.has(t.status)) row.open += 1;
+      if (CLOSED_STATUSES.has(t.status)) row.closed += 1;
+      if (isWithinDays(t.created_at, 7)) row.thisWeek += 1;
+      breakdownMap.set(label, row);
+    }
+    const issueTypeBreakdown = Array.from(breakdownMap.values()).sort((a, b) => b.total - a.total);
+
     const recentTickets = tickets.slice(0, 25).map((t) => ({
       id: t.id,
       subject: t.subject,
@@ -121,6 +148,7 @@ export async function GET() {
       },
       recentTickets,
       oldestUnresolved,
+      issueTypeBreakdown,
       satisfaction: { positive, negative },
     });
   } catch (err) {
