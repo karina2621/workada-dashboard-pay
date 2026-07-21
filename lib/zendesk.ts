@@ -97,7 +97,7 @@ interface SatisfactionRatingsResponse {
 // Zendesk search query strings need spaces encoded and quoting for phrases.
 async function searchTickets(query: string): Promise<ZendeskTicket[]> {
   const all: ZendeskTicket[] = [];
-  let path: string | null = `/search.json?query=${encodeURIComponent(query)}&sort_by=created_at&sort_order=desc&page[size]=100`;
+  let path: string | null = `/search.json?query=${encodeURIComponent(query)}&sort_by=created_at&sort_order=desc&per_page=100`;
   let pages = 0;
 
   while (path && pages < 10) {
@@ -179,7 +179,7 @@ export async function fetchSatisfactionRatings(
   ticketIds: Set<number>
 ): Promise<SatisfactionRating[]> {
   const all: SatisfactionRating[] = [];
-  let path: string | null = "/satisfaction_ratings.json?page[size]=100&sort_by=created_at&sort_order=desc";
+  let path: string | null = "/satisfaction_ratings.json?per_page=100&sort_by=created_at&sort_order=desc";
   let pages = 0;
 
   while (path && pages < 10) {
