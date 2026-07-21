@@ -26,6 +26,14 @@ export interface SatisfactionComment {
   createdAt: string;
 }
 
+export interface IssueTypeBreakdownRow {
+  issueType: string;
+  total: number;
+  open: number;
+  closed: number;
+  thisWeek: number;
+}
+
 export interface DashboardData {
   generatedAt: string;
   assigneeLabel: string;
@@ -39,6 +47,7 @@ export interface DashboardData {
   };
   recentTickets: DashboardTicket[];
   oldestUnresolved: OldestUnresolvedTicket[];
+  issueTypeBreakdown: IssueTypeBreakdownRow[];
   satisfaction: {
     positive: SatisfactionComment[];
     negative: SatisfactionComment[];
