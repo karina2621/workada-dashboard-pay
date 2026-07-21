@@ -249,6 +249,43 @@ export default function Dashboard() {
               </table>
             </div>
           </Panel>
+
+          {/* Breakdown by issue type */}
+          <Panel title="Breakdown by issue type — total / open / closed / this week" className="mt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr style={{ color: "var(--text-faint)" }} className="text-xs uppercase">
+                    <th className="pb-2 pr-4 font-medium">Issue type</th>
+                    <th className="pb-2 pr-4 font-medium">Total</th>
+                    <th className="pb-2 pr-4 font-medium">Open</th>
+                    <th className="pb-2 pr-4 font-medium">Closed</th>
+                    <th className="pb-2 font-medium">This week</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.issueTypeBreakdown.map((row) => (
+                    <tr key={row.issueType} className="border-t" style={{ borderColor: "var(--panel-border)" }}>
+                      <td className="py-2 pr-4">{row.issueType}</td>
+                      <td className="py-2 pr-4 font-medium">{row.total}</td>
+                      <td className="py-2 pr-4" style={{ color: "var(--accent-purple)" }}>{row.open}</td>
+                      <td className="py-2 pr-4" style={{ color: "var(--accent-green)" }}>{row.closed}</td>
+                      <td className="py-2" style={{ color: "var(--accent-blue)" }}>
+                        {row.thisWeek > 0 ? `+${row.thisWeek}` : row.thisWeek}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.issueTypeBreakdown.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                        No breakdown data available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
         </>
       )}
     </div>
